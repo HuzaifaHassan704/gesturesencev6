@@ -1,0 +1,12 @@
+.venv/
+__pycache__/
+*.log
+captures/
+gesturesense_settings.json
+gesturesense_profiles.json
+gesturesense_stats.json
+gesturesense_autorules.json
+hand_landmarker.task
+dist/
+build/
+*.spec
