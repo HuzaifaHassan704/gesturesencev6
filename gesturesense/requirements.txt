@@ -1,9 +1,0 @@
-opencv-python>=4.9
-mediapipe>=0.10.14
-numpy
-pillow
-pyautogui
-pycaw; sys_platform == "win32"
-comtypes; sys_platform == "win32"
-pystray; sys_platform == "win32"
-screen-brightness-control; sys_platform == "win32"
