@@ -13,9 +13,9 @@ python -m pip install --disable-pip-version-check -q -r requirements.txt pyinsta
 if errorlevel 1 goto :fail
 rem Optional: put hand_landmarker.task next to this file first to ship it inside the build.
 set MODELARG=
-if exist hand_landmarker.task set MODELARG=--add-data "hand_landmarker.task;."
-pyinstaller --noconfirm --clean --windowed --name GestureSense --icon icon.ico ^
-  --add-data "icon.png;." %MODELARG% ^
+if exist hand_landmarker.task set MODELARG=--add-data "hand_landmarker.task;gesturesense\assets"
+pyinstaller --noconfirm --clean --windowed --name GestureSense --icon gesturesense\assets\icon.ico ^
+  --add-data "gesturesense\assets;gesturesense\assets" %MODELARG% ^
   --collect-all mediapipe --collect-submodules pycaw --hidden-import comtypes --hidden-import pystray._win32 --hidden-import screen_brightness_control ^
   main.py
 if errorlevel 1 goto :fail
