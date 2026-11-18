@@ -1,6 +1,25 @@
-.venv/
+# Python
 __pycache__/
-hand_landmarker.task
+*.py[cod]
+.venv/
+venv/
+.ruff_cache/
+.pytest_cache/
+*.egg-info/
+
+# Runtime files created by the app (they live next to the code when run from source)
+*.log
 gesturesense_settings.json
-captures/
 gesturesense_profiles.json
+gesturesense_stats.json
+gesturesense_autorules.json
+captures/
+
+# Downloaded model (fetched on first run)
+hand_landmarker.task
+*.part
+
+# Build output
+build/
+dist/
+*.spec

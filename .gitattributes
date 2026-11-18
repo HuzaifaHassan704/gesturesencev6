@@ -1,0 +1,11 @@
+# Windows batch files must keep CRLF line endings, even in "Download ZIP" and on Linux/macOS.
+*.bat text eol=crlf
+*.cmd text eol=crlf
+
+# Everything else: normalise to LF in the repository.
+* text=auto
+*.py text eol=lf
+*.md text eol=lf
+*.png binary
+*.ico binary
+*.task binary

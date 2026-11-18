@@ -1,2 +1,0 @@
-2026-11-17 11:40:17,458 INFO GestureSense 6.1.0 starting (python 3.14.6)
-2026-11-17 11:45:37,264 WARNING exception parsing edid str for DISPLAY\ZTR0013\5&7a18b69&0&UID512_0 - EDIDParseError: parsed EDID returned invalid display name
