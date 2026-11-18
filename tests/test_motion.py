@@ -1,4 +1,5 @@
 """Motion animations: they react to hand speed, stay bounded and can be switched off."""
+
 import math
 import os
 import sys
@@ -8,10 +9,10 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import numpy as np  # noqa: E402
 
-from demo3d import _Audio, synthetic_hand, to_landmarks  # noqa: E402
-from gestures import GestureEngine  # noqa: E402
-from render3d import VIEW_H, VIEW_W, Scene3D  # noqa: E402
-from settings import DEFAULTS  # noqa: E402
+from gesturesense.config.settings import DEFAULTS  # noqa: E402
+from gesturesense.core.gestures import GestureEngine  # noqa: E402
+from gesturesense.demo3d import _Audio, synthetic_hand, to_landmarks  # noqa: E402
+from gesturesense.render import VIEW_H, VIEW_W, Scene3D  # noqa: E402
 
 
 def run(settings, moving, frames=40):

@@ -2,6 +2,7 @@
 
 Run from the project folder:   python -m unittest discover -s tests -v
 """
+
 import os
 import sys
 import tempfile
@@ -14,11 +15,18 @@ import cv2  # noqa: E402
 import numpy as np  # noqa: E402
 from PIL import Image  # noqa: E402
 
-import capture  # noqa: E402
-from demo3d import _Audio, synthetic_hand, to_landmarks  # noqa: E402
-from gestures import FrameResult, GestureEngine  # noqa: E402
-from render3d import DEFAULT_THEME, THEMES, VIEW_H, VIEW_W, Scene3D, gauge_color  # noqa: E402
-from settings import DEFAULTS  # noqa: E402
+from gesturesense.config.settings import DEFAULTS  # noqa: E402
+from gesturesense.core.gestures import FrameResult, GestureEngine  # noqa: E402
+from gesturesense.demo3d import _Audio, synthetic_hand, to_landmarks  # noqa: E402
+from gesturesense.render import (  # noqa: E402
+    DEFAULT_THEME,
+    THEMES,
+    VIEW_H,
+    VIEW_W,
+    Scene3D,
+    gauge_color,
+)
+from gesturesense.system import capture  # noqa: E402
 
 
 def frame(value=120, w=320, h=240):
@@ -51,7 +59,7 @@ class RecorderTests(unittest.TestCase):
             path = rec.start((320, 240), Path(d))
             self.assertTrue(rec.active)
             t = 100.0
-            for i in range(30):                      # 10 fps arrival for 3 s -> still 25 fps video
+            for i in range(30):  # 10 fps arrival for 3 s -> still 25 fps video
                 rec.write(frame(i * 8), now=t + i * 0.1)
             out, seconds = rec.stop()
             self.assertFalse(rec.active)
@@ -69,7 +77,7 @@ class RecorderTests(unittest.TestCase):
             rec = capture.Recorder()
             rec.start((321, 241), Path(d))
             self.assertEqual(rec.size, (320, 240))
-            rec.write(frame(w=500, h=300), now=1.0)      # window resized mid-recording
+            rec.write(frame(w=500, h=300), now=1.0)  # window resized mid-recording
             rec.write(frame(w=500, h=300), now=1.2)
             path, _ = rec.stop()
             cap = cv2.VideoCapture(str(path))
@@ -85,7 +93,7 @@ class RecorderTests(unittest.TestCase):
             rec = capture.Recorder(fps=25)
             rec.start((320, 240), Path(d))
             rec.write(frame(), now=0.0)
-            rec.write(frame(), now=60.0)                 # a minute of silence
+            rec.write(frame(), now=60.0)  # a minute of silence
             self.assertLessEqual(rec.count, 26)
             rec.stop()
 
@@ -108,9 +116,10 @@ class ThemeTests(unittest.TestCase):
             self.assertEqual(img.shape, (VIEW_H, VIEW_W, 3), name)
         names = list(imgs)
         for i, a in enumerate(names):
-            for b in names[i + 1:]:
-                self.assertGreater(float(np.abs(imgs[a].astype(int) - imgs[b].astype(int)).mean()),
-                                   1.0, (a, b))
+            for b in names[i + 1 :]:
+                self.assertGreater(
+                    float(np.abs(imgs[a].astype(int) - imgs[b].astype(int)).mean()), 1.0, (a, b)
+                )
 
     def test_unknown_theme_falls_back_and_switching_back_restores(self):
         scene = Scene3D()
@@ -194,10 +203,10 @@ class HandStyleTests(unittest.TestCase):
 
 class HumanHandTests(unittest.TestCase):
     def test_every_skin_tone_renders_and_differs(self):
-        from demo3d import _Audio, synthetic_hand, to_landmarks
-        from gestures import GestureEngine
-        from render3d import SKIN_TONES, Scene3D
-        from settings import DEFAULTS
+        from gesturesense.config.settings import DEFAULTS
+        from gesturesense.core.gestures import GestureEngine
+        from gesturesense.demo3d import _Audio, synthetic_hand, to_landmarks
+        from gesturesense.render import SKIN_TONES, Scene3D
 
         outs = {}
         for tone in SKIN_TONES:
@@ -213,10 +222,10 @@ class HumanHandTests(unittest.TestCase):
         self.assertFalse(np.array_equal(outs["light"], outs["deep"]))
 
     def test_unknown_skin_tone_falls_back(self):
-        from demo3d import _Audio, synthetic_hand, to_landmarks
-        from gestures import GestureEngine
-        from render3d import Scene3D
-        from settings import DEFAULTS
+        from gesturesense.config.settings import DEFAULTS
+        from gesturesense.core.gestures import GestureEngine
+        from gesturesense.demo3d import _Audio, synthetic_hand, to_landmarks
+        from gesturesense.render import Scene3D
 
         eng = GestureEngine(_Audio(), press=lambda k: None, now=0.0)
         sc = Scene3D(480, 360)
@@ -228,10 +237,10 @@ class HumanHandTests(unittest.TestCase):
 
 class AndroidHandTests(unittest.TestCase):
     def test_android_renders_and_differs_from_robot(self):
-        from demo3d import _Audio, synthetic_hand, to_landmarks
-        from gestures import GestureEngine
-        from render3d import Scene3D
-        from settings import DEFAULTS
+        from gesturesense.config.settings import DEFAULTS
+        from gesturesense.core.gestures import GestureEngine
+        from gesturesense.demo3d import _Audio, synthetic_hand, to_landmarks
+        from gesturesense.render import Scene3D
 
         outs = {}
         for style in ("android", "robot"):

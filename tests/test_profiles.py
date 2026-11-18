@@ -2,6 +2,7 @@
 
 Run from the project folder:   python -m unittest discover -s tests -v
 """
+
 import json
 import os
 import sys
@@ -14,12 +15,12 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import numpy as np  # noqa: E402
 
-import actions  # noqa: E402
-import profiles  # noqa: E402
-from effects import EffectsManager  # noqa: E402
-from gestures import GestureEngine, analyze  # noqa: E402
-from settings import DEFAULTS  # noqa: E402
-from tests.test_logic import FakeAudio, hand  # noqa: E402
+from gesturesense.config import profiles  # noqa: E402
+from gesturesense.config.settings import DEFAULTS  # noqa: E402
+from gesturesense.core import actions  # noqa: E402
+from gesturesense.core.gestures import GestureEngine, analyze  # noqa: E402
+from gesturesense.render.effects import EffectsManager  # noqa: E402
+from tests.helpers import FakeAudio, hand  # noqa: E402
 
 SIZE = (640, 480)
 FIST = dict(index=False, middle=False, ring=False, pinky=False)
@@ -28,7 +29,7 @@ FIST = dict(index=False, middle=False, ring=False, pinky=False)
 def thumbs(up: bool, **kw):
     """A curled hand whose thumb points well above (up) or below (down) the index knuckle."""
     lm = hand(**FIST, **kw)
-    lm[4] = NS(x=0.36, y=0.40 if up else 0.85)       # index knuckle is at y = 0.6, palm size 0.3
+    lm[4] = NS(x=0.36, y=0.40 if up else 0.85)  # index knuckle is at y = 0.6, palm size 0.3
     return lm
 
 
@@ -42,9 +43,13 @@ class Rig:
     def __init__(self, vol=0.5):
         self.audio = FakeAudio(vol)
         self.keys, self.hotkeys, self.launched = [], [], []
-        self.eng = GestureEngine(self.audio, press=self.keys.append,
-                                 hotkey=lambda *k: self.hotkeys.append(k),
-                                 launch=self.launched.append, now=0.0)
+        self.eng = GestureEngine(
+            self.audio,
+            press=self.keys.append,
+            hotkey=lambda *k: self.hotkeys.append(k),
+            launch=self.launched.append,
+            now=0.0,
+        )
 
     def run(self, lm, seconds, s, start=0.0, fps=30):
         res, events = None, []
@@ -70,8 +75,9 @@ class ActionTests(unittest.TestCase):
     def runner(self, vol=0.5):
         self.audio = FakeAudio(vol)
         self.keys, self.hot, self.launched = [], [], []
-        return actions.ActionRunner(self.audio, self.keys.append, lambda *k: self.hot.append(k),
-                                    self.launched.append)
+        return actions.ActionRunner(
+            self.audio, self.keys.append, lambda *k: self.hot.append(k), self.launched.append
+        )
 
     def test_keys_hotkeys_and_none(self):
         r = self.runner()
@@ -136,20 +142,26 @@ class ProfileTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as d:
             path = Path(d) / "p.json"
             data = profiles.defaults()
-            data["profiles"]["Mine"] = {"fist_hold": "screenshot", "peace_hold": "BOGUS", "extra": "x"}
+            data["profiles"]["Mine"] = {
+                "fist_hold": "screenshot",
+                "peace_hold": "BOGUS",
+                "extra": "x",
+            }
             data["active"] = "Mine"
             profiles.save(data, path)
             got = profiles.load(path)
             self.assertEqual(got["active"], "Mine")
             self.assertEqual(got["profiles"]["Mine"]["fist_hold"], "screenshot")
-            self.assertEqual(got["profiles"]["Mine"]["peace_hold"], "none")      # invalid -> none
+            self.assertEqual(got["profiles"]["Mine"]["peace_hold"], "none")  # invalid -> none
             self.assertNotIn("extra", got["profiles"]["Mine"])
             self.assertEqual(set(got["profiles"]["Mine"]), set(profiles.GESTURE_KEYS))
 
     def test_deleted_builtin_comes_back_and_bad_active_is_ignored(self):
         with tempfile.TemporaryDirectory() as d:
             path = Path(d) / "p.json"
-            path.write_text(json.dumps({"active": "Ghost", "profiles": {"Mine": {}}}), encoding="utf-8")
+            path.write_text(
+                json.dumps({"active": "Ghost", "profiles": {"Mine": {}}}), encoding="utf-8"
+            )
             got = profiles.load(path)
             self.assertEqual(got["active"], "Music")
             self.assertIn("Gaming", got["profiles"])
@@ -165,12 +177,14 @@ class ProfileTests(unittest.TestCase):
 class EngineMappingTests(unittest.TestCase):
     def test_default_mapping_is_the_music_profile(self):
         rig = Rig()
-        rig.run(hand(ring=False, pinky=False), 1.0, settings())          # peace, no mapping given
+        rig.run(hand(ring=False, pinky=False), 1.0, settings())  # peace, no mapping given
         self.assertEqual(rig.keys, ["playpause"])
 
     def test_peace_follows_the_active_profile(self):
         rig = Rig()
-        rig.run(hand(ring=False, pinky=False), 1.0, settings(mapping=profiles.BUILTIN["Presentation"]))
+        rig.run(
+            hand(ring=False, pinky=False), 1.0, settings(mapping=profiles.BUILTIN["Presentation"])
+        )
         self.assertEqual(rig.keys, ["f5"])
 
     def test_swipe_directions_use_the_mapping(self):
@@ -184,7 +198,9 @@ class EngineMappingTests(unittest.TestCase):
 
     def test_none_action_does_nothing(self):
         rig = Rig()
-        res, events = rig.run(hand(**FIST), 1.5, settings(mapping=profiles.BUILTIN["Gaming"] | {"fist_hold": "none"}))
+        res, events = rig.run(
+            hand(**FIST), 1.5, settings(mapping=profiles.BUILTIN["Gaming"] | {"fist_hold": "none"})
+        )
         self.assertEqual(events, [])
         self.assertFalse(rig.audio.mute)
 
@@ -198,20 +214,20 @@ class EngineMappingTests(unittest.TestCase):
     def test_thumbs_up_steps_volume_once_then_repeats_while_held(self):
         rig = Rig(0.3)
         s = settings()
-        _, events = rig.run(thumbs(True), 0.5, s)                        # not held long enough
+        _, events = rig.run(thumbs(True), 0.5, s)  # not held long enough
         self.assertEqual(events, [])
         self.assertAlmostEqual(rig.audio.vol, 0.3)
-        _, events = rig.run(thumbs(True), 0.4, s, start=0.5)             # hold reached (0.7 s)
+        _, events = rig.run(thumbs(True), 0.4, s, start=0.5)  # hold reached (0.7 s)
         self.assertEqual([e.kind for e in events], ["vol_up"])
         self.assertAlmostEqual(rig.audio.vol, 0.4)
-        _, events = rig.run(thumbs(True), 1.5, s, start=0.9)             # keeps stepping while held
+        _, events = rig.run(thumbs(True), 1.5, s, start=0.9)  # keeps stepping while held
         self.assertGreaterEqual(len(events), 2)
         self.assertGreater(rig.audio.vol, 0.55)
 
     def test_thumbs_down_lowers_and_pinch_logic_stays_out_of_the_way(self):
         rig = Rig(0.5)
         rig.run(thumbs(False, ratio=1.1), 1.0, settings())
-        self.assertAlmostEqual(rig.audio.vol, 0.4)        # exactly one step, no pinch-driven drift
+        self.assertAlmostEqual(rig.audio.vol, 0.4)  # exactly one step, no pinch-driven drift
 
     def test_thumbs_disabled(self):
         rig = Rig(0.5)

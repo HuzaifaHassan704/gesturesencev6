@@ -2,6 +2,7 @@
 
 Run from the project folder:   python -m unittest discover -s tests -v
 """
+
 import math
 import os
 import sys
@@ -11,10 +12,17 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import numpy as np  # noqa: E402
 
-from demo3d import _Audio, synthetic_hand, to_landmarks  # noqa: E402
-from gestures import FrameResult, GestureEngine  # noqa: E402
-from render3d import GAUGE_POS, VIEW_H, VIEW_W, Camera, Scene3D, gauge_color  # noqa: E402
-from settings import DEFAULTS  # noqa: E402
+from gesturesense.config.settings import DEFAULTS  # noqa: E402
+from gesturesense.core.gestures import FrameResult, GestureEngine  # noqa: E402
+from gesturesense.demo3d import _Audio, synthetic_hand, to_landmarks  # noqa: E402
+from gesturesense.render import (  # noqa: E402
+    GAUGE_POS,
+    VIEW_H,
+    VIEW_W,
+    Camera,
+    Scene3D,
+    gauge_color,
+)
 
 S = dict(DEFAULTS)
 
@@ -39,8 +47,8 @@ class CameraTests(unittest.TestCase):
         cam.set(0.0, 0.3, 8.0)
         t = cam.target
         xy, _, _ = cam.project(np.array([t, t + [1, 0, 0], t + [0, 1, 0]]))
-        self.assertGreater(xy[1, 0], xy[0, 0])      # +X is to the right on screen
-        self.assertLess(xy[2, 1], xy[0, 1])         # +Y is up (smaller pixel row)
+        self.assertGreater(xy[1, 0], xy[0, 0])  # +X is to the right on screen
+        self.assertLess(xy[2, 1], xy[0, 1])  # +Y is up (smaller pixel row)
 
     def test_nearer_points_are_larger(self):
         cam = Camera(VIEW_W, VIEW_H)
@@ -66,7 +74,7 @@ class SceneTests(unittest.TestCase):
         img = self.scene.render(res, S, 30.0, now=0.0)
         self.assertEqual(img.shape, (VIEW_H, VIEW_W, 3))
         self.assertEqual(img.dtype, np.uint8)
-        self.assertGreater(img.max(), 200)           # something bright (hand / tower) was drawn
+        self.assertGreater(img.max(), 200)  # something bright (hand / tower) was drawn
         self.assertGreater(float(img.mean()), 8)
 
     def test_all_states_render(self):
@@ -100,9 +108,10 @@ class SceneTests(unittest.TestCase):
             sc = Scene3D()
             res = FrameResult(volume=vol)
             s = dict(S, orbit_auto=False)
-            for i in range(30):                      # let the smoothing settle
+            for i in range(30):  # let the smoothing settle
                 img = sc.render(res, s, 30.0, now=i / 30)
             return int((img.max(axis=2) > 170).sum())
+
         self.assertGreater(lit_pixels(0.9), lit_pixels(0.1))
 
     def test_hand_fades_out_without_detection(self):
@@ -132,7 +141,9 @@ class SceneTests(unittest.TestCase):
         res = FrameResult()
         yaws = []
         for i in range(300):
-            sc.render(res, dict(S, orbit_auto=True, orbit_speed=30.0, orbit_range=40.0), 30.0, now=i / 30)
+            sc.render(
+                res, dict(S, orbit_auto=True, orbit_speed=30.0, orbit_range=40.0), 30.0, now=i / 30
+            )
             yaws.append(math.degrees(sc.yaw))
         self.assertGreater(max(yaws), 25)
         self.assertLess(min(yaws), -25)
@@ -145,8 +156,12 @@ class SceneTests(unittest.TestCase):
     def test_full_spin_mode(self):
         sc = Scene3D()
         for i in range(90):
-            sc.render(FrameResult(), dict(S, orbit_auto=True, orbit_speed=60.0, orbit_range=180.0),
-                      30.0, now=i / 30)
+            sc.render(
+                FrameResult(),
+                dict(S, orbit_auto=True, orbit_speed=60.0, orbit_range=180.0),
+                30.0,
+                now=i / 30,
+            )
         self.assertGreater(math.degrees(sc.yaw), 150)
 
     def test_inset_and_every_toggle_combination(self):

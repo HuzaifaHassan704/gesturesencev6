@@ -2,6 +2,7 @@
 
 Run from the project folder:   python -m unittest discover -s tests -v
 """
+
 import os
 import sys
 import unittest
@@ -10,11 +11,16 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import numpy as np  # noqa: E402
 
-from calibration import CalibrationError, Collector, compute_range, quality  # noqa: E402
-from filters import LandmarkFilter, OneEuro  # noqa: E402
-from gestures import GestureEngine  # noqa: E402
-from settings import DEFAULTS  # noqa: E402
-from tests.test_logic import PINCH, FakeAudio, hand  # noqa: E402
+from gesturesense.config.settings import DEFAULTS  # noqa: E402
+from gesturesense.core.calibration import (  # noqa: E402
+    CalibrationError,
+    Collector,
+    compute_range,
+    quality,
+)
+from gesturesense.core.filters import LandmarkFilter, OneEuro  # noqa: E402
+from gesturesense.core.gestures import GestureEngine  # noqa: E402
+from tests.helpers import PINCH, FakeAudio, hand  # noqa: E402
 
 S = dict(DEFAULTS)
 SIZE = (640, 480)
@@ -30,7 +36,7 @@ class FilterTests(unittest.TestCase):
 
     def test_follows_fast_motion_with_little_lag(self):
         f = OneEuro(min_cutoff=0.5, beta=8.0)
-        out = [float(f(np.array([i / 30.0 * 2]), i / 30)[0]) for i in range(60)]   # 2 units / second
+        out = [float(f(np.array([i / 30.0 * 2]), i / 30)[0]) for i in range(60)]  # 2 units / second
         self.assertLess(abs(out[-1] - 59 / 30 * 2), 0.15)
 
     def test_strength_zero_is_a_passthrough(self):
@@ -51,10 +57,10 @@ class FilterTests(unittest.TestCase):
             out, _ = lf.apply(lm, None, i / 30, 0.8)
             xs.append(out[8].x)
         self.assertLess(np.std(xs[30:]), 0.004 * 0.6)
-        lf.miss(10.0)                                         # long absence -> forget the old pose
+        lf.miss(10.0)  # long absence -> forget the old pose
         lm = hand(**PINCH, ratio=0.5, wrist_x=0.9)
         out, _ = lf.apply(lm, None, 10.1, 0.8)
-        self.assertAlmostEqual(out[0].x, lm[0].x, places=6)   # no smear from the old position
+        self.assertAlmostEqual(out[0].x, lm[0].x, places=6)  # no smear from the old position
 
     def test_output_has_xyz_attributes(self):
         lf = LandmarkFilter()
@@ -79,19 +85,19 @@ class RecoveryTests(unittest.TestCase):
         res = self.eng.update(None, SIZE, S, now=1.1)
         self.assertTrue(res.has_hand)
         self.assertTrue(res.coasting)
-        res = self.eng.update(None, SIZE, S, now=2.0)         # too long -> really lost
+        res = self.eng.update(None, SIZE, S, now=2.0)  # too long -> really lost
         self.assertFalse(res.has_hand)
 
     def test_volume_is_frozen_while_the_hand_settles(self):
         self.feed(hand(**PINCH, ratio=0.6), 0.0, 0.5)
         self.feed(None, 1.0, 1.0)
         self.audio.vol = 0.3
-        res = self.eng.update(hand(**PINCH, ratio=1.1), SIZE, S, now=3.0)   # big spread right away
+        res = self.eng.update(hand(**PINCH, ratio=1.1), SIZE, S, now=3.0)  # big spread right away
         self.assertTrue(res.settling)
         self.assertFalse(res.controlling)
         self.assertAlmostEqual(self.audio.vol, 0.3)
         self.feed(hand(**PINCH, ratio=1.1), 3.0, 0.3)
-        self.assertAlmostEqual(self.audio.vol, 0.3)           # still inside the 0.4 s window
+        self.assertAlmostEqual(self.audio.vol, 0.3)  # still inside the 0.4 s window
 
     def test_volume_eases_in_after_settling(self):
         self.feed(hand(**PINCH, ratio=0.6), 0.0, 0.5)
@@ -99,16 +105,16 @@ class RecoveryTests(unittest.TestCase):
         self.eng.update(None, SIZE, S, now=1.0)
         s = dict(S, lost_grace=0.0)
         self.eng.update(None, SIZE, s, now=1.5)
-        res = self.eng.update(hand(**PINCH, ratio=1.1), SIZE, s, now=3.0)
+        self.eng.update(hand(**PINCH, ratio=1.1), SIZE, s, now=3.0)
         t, prev, steps = 3.0, self.audio.vol, []
         for _ in range(45):
             t += 1 / 30
-            res = self.eng.update(hand(**PINCH, ratio=1.1), SIZE, s, now=t)
+            self.eng.update(hand(**PINCH, ratio=1.1), SIZE, s, now=t)
             steps.append(self.audio.vol - prev)
             prev = self.audio.vol
         moving = [x for x in steps if x > 1e-9]
-        self.assertLessEqual(moving[0], 0.0125)               # first step is gentle
-        self.assertGreater(max(moving), 0.04)                 # and it speeds up to full rate
+        self.assertLessEqual(moving[0], 0.0125)  # first step is gentle
+        self.assertGreater(max(moving), 0.04)  # and it speeds up to full rate
         self.assertGreater(self.audio.vol, 0.6)
 
     def test_no_settle_on_the_very_first_continuous_frames(self):
@@ -140,7 +146,7 @@ class CalibrationTests(unittest.TestCase):
 
     def test_collector_pauses_without_a_hand(self):
         c, t = self.run_collector(0.2, hand_visible=lambda t: not (1.0 < t < 3.0))
-        self.assertGreater(t, 4.5)                            # the 2 s gap did not count
+        self.assertGreater(t, 4.5)  # the 2 s gap did not count
 
     def test_range_from_good_samples(self):
         lo, hi = compute_range([0.12] * 20, [1.2] * 20)

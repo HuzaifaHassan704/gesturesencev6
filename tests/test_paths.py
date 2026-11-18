@@ -1,4 +1,3 @@
-import importlib
 import os
 import sys
 import tempfile
@@ -9,7 +8,8 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 class PathTests(unittest.TestCase):
     def test_env_override_and_creation(self):
-        import paths
+        from gesturesense import paths
+
         with tempfile.TemporaryDirectory() as d:
             target = os.path.join(d, "gs")
             os.environ["GESTURESENSE_HOME"] = target
@@ -20,11 +20,13 @@ class PathTests(unittest.TestCase):
                 del os.environ["GESTURESENSE_HOME"]
 
     def test_source_default(self):
-        import paths
+        from gesturesense import paths
+
         self.assertEqual(paths.data_dir(), paths.SOURCE_DIR)
 
     def test_version(self):
-        import version
+        from gesturesense import version
+
         self.assertRegex(version.__version__, r"^\d+\.\d+\.\d+$")
 
 

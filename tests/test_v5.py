@@ -1,22 +1,23 @@
 """Sounds, pause, hotkey/tray fallbacks and the tutorial logic (no GUI, speaker or camera)."""
+
 import io
 import os
 import queue
 import sys
 import unittest
 import wave
+from pathlib import Path
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import numpy as np  # noqa: E402
 
-import sounds  # noqa: E402
-import tutorial_logic as tl  # noqa: E402
-from demo3d import _Audio, synthetic_hand, to_landmarks  # noqa: E402
-from gestures import Event, FrameResult, GestureEngine  # noqa: E402
-from hotkey import GlobalHotkey, Tray  # noqa: E402
-from render3d import VIEW_H, VIEW_W  # noqa: E402
-from settings import DEFAULTS  # noqa: E402
+from gesturesense.config.settings import DEFAULTS  # noqa: E402
+from gesturesense.core import tutorial_logic as tl  # noqa: E402
+from gesturesense.core.gestures import Event, FrameResult, GestureEngine  # noqa: E402
+from gesturesense.demo3d import _Audio, synthetic_hand, to_landmarks  # noqa: E402
+from gesturesense.system import sounds  # noqa: E402
+from gesturesense.system.hotkey import GlobalHotkey, Tray  # noqa: E402
 
 
 class SoundTests(unittest.TestCase):
@@ -35,13 +36,14 @@ class SoundTests(unittest.TestCase):
         def peak(v):
             with wave.open(io.BytesIO(sounds.tone_wav([(440, 0.1)], v))) as w:
                 return int(np.abs(np.frombuffer(w.readframes(w.getnframes()), "<i2")).max())
+
         self.assertGreater(peak(1.0), peak(0.2))
 
     def test_player_plays_and_rate_limits(self):
         got = []
         p = sounds.SoundPlayer(backend=got.append)
         self.assertTrue(p.play("next", 0.5, now=10.0))
-        self.assertFalse(p.play("prev", 0.5, now=10.01))     # too soon
+        self.assertFalse(p.play("prev", 0.5, now=10.01))  # too soon
         self.assertTrue(p.play("prev", 0.5, now=10.5))
         self.assertFalse(p.play("nonsense", 0.5, now=11.0))
         self.assertEqual(len(got), 2)
@@ -55,6 +57,7 @@ class SoundTests(unittest.TestCase):
     def test_broken_backend_disables_itself(self):
         def boom(_):
             raise OSError("no device")
+
         p = sounds.SoundPlayer(backend=boom)
         self.assertFalse(p.play("next", 0.5, now=1.0))
         self.assertFalse(p.available)
@@ -62,7 +65,7 @@ class SoundTests(unittest.TestCase):
     def test_tick_only_when_crossing_a_step(self):
         got = []
         p = sounds.SoundPlayer(backend=got.append)
-        p.tick(0.52, 0.5, now=1.0)           # first call just records the level
+        p.tick(0.52, 0.5, now=1.0)  # first call just records the level
         self.assertFalse(p.tick(0.55, 0.5, now=2.0))
         self.assertTrue(p.tick(0.62, 0.5, now=3.0))
         self.assertEqual(len(got), 1)
@@ -82,7 +85,8 @@ class PauseTests(unittest.TestCase):
 
     @staticmethod
     def fist():
-        from test_logic import hand
+        from tests.helpers import hand
+
         return hand(index=False, middle=False, ring=False, pinky=False)
 
     def run_fist(self, settings, seconds=2.0):
@@ -94,7 +98,7 @@ class PauseTests(unittest.TestCase):
             res = eng.update(self.fist(), self.SIZE, settings, now=i / 30)
         return audio, res
 
-    def test_fist_mutes_when_not_paused(self):                  # proves the pause test below is real
+    def test_fist_mutes_when_not_paused(self):  # proves the pause test below is real
         audio, res = self.run_fist(dict(DEFAULTS, paused=False))
         self.assertTrue(audio.mute)
         self.assertFalse(res.paused)
@@ -105,16 +109,21 @@ class PauseTests(unittest.TestCase):
         self.assertTrue(res.paused)
         self.assertEqual(res.events, [])
         self.assertFalse(res.controlling)
-        self.assertTrue(res.pose.fist)                          # still tracked, so the tutorial can see it
+        self.assertTrue(res.pose.fist)  # still tracked, so the tutorial can see it
 
     def test_pause_keeps_volume_still(self):
         audio = _Audio()
         eng = GestureEngine(audio, press=lambda k: None, now=0.0)
-        from test_logic import hand
+        from tests.helpers import hand
+
         before = audio.get()
         for i in range(60):
-            eng.update(hand(index=True, middle=False, ring=False, pinky=False, ratio=1.1), self.SIZE,
-                       dict(DEFAULTS, paused=True), now=i / 30)
+            eng.update(
+                hand(index=True, middle=False, ring=False, pinky=False, ratio=1.1),
+                self.SIZE,
+                dict(DEFAULTS, paused=True),
+                now=i / 30,
+            )
         self.assertEqual(audio.get(), before)
 
     def test_resuming_works_again(self):
@@ -140,7 +149,7 @@ class HotkeyTrayTests(unittest.TestCase):
         if sys.platform != "win32":
             self.assertFalse(hk.supported())
             self.assertFalse(hk.start())
-        hk.stop()                                              # never raises
+        hk.stop()  # never raises
 
     def test_tray_degrades_without_pystray(self):
         t = Tray(queue.Queue(), None)
@@ -165,7 +174,7 @@ class TutorialTests(unittest.TestCase):
     def test_hold_gesture_needs_time(self):
         tr = tl.new_tracker(tl.STEP_KEYS.index("fist"))
         info = {"has_hand": True, "flags": {"fist": True}}
-        feed(tr, [info] * 10)                                  # 0.33 s: not yet
+        feed(tr, [info] * 10)  # 0.33 s: not yet
         self.assertFalse(tr.done)
         feed(tr, [info] * 40)
         self.assertTrue(tr.done)
@@ -191,12 +200,15 @@ class TutorialTests(unittest.TestCase):
 
     def test_swipe_needs_open_palm_motion(self):
         tr = tl.new_tracker(tl.STEP_KEYS.index("swipe"))
-        fist_moving = [{"has_hand": True, "flags": {"fist": True}, "x": x}
-                       for x in np.linspace(0.2, 0.8, 20)]
+        fist_moving = [
+            {"has_hand": True, "flags": {"fist": True}, "x": x} for x in np.linspace(0.2, 0.8, 20)
+        ]
         feed(tr, fist_moving)
         self.assertFalse(tr.done)
-        palm = [{"has_hand": True, "flags": {"palm_open": True}, "x": x}
-                for x in np.linspace(0.3, 0.7, 20)]
+        palm = [
+            {"has_hand": True, "flags": {"palm_open": True}, "x": x}
+            for x in np.linspace(0.3, 0.7, 20)
+        ]
         feed(tr, palm)
         self.assertTrue(tr.done)
 
@@ -235,7 +247,8 @@ class TwoHandTests(unittest.TestCase):
     SIZE = (640, 480)
 
     def test_assign_by_side(self):
-        from twohand import assign
+        from gesturesense.core.twohand import assign
+
         self.assertEqual(assign([0.5]), (0, None))
         self.assertEqual(assign([0.3, 0.7]), (1, 0))
         self.assertEqual(assign([0.7, 0.3]), (0, 1))
@@ -244,11 +257,13 @@ class TwoHandTests(unittest.TestCase):
             assign([])
 
     def make(self, ratio, **kw):
-        from test_logic import hand
+        from tests.helpers import hand
+
         return hand(index=True, middle=False, ring=False, pinky=False, ratio=ratio, **kw)
 
     def test_pinch_sets_level_and_calls_setter(self):
-        from twohand import SecondaryEngine
+        from gesturesense.core.twohand import SecondaryEngine
+
         sent = []
         eng = SecondaryEngine(sent.append, level=0.5, sync=True)
         for i in range(90):
@@ -262,16 +277,18 @@ class TwoHandTests(unittest.TestCase):
         self.assertLess(res.volume, 0.1)
 
     def test_setter_is_rate_limited(self):
-        from twohand import SecondaryEngine
+        from gesturesense.core.twohand import SecondaryEngine
+
         sent = []
         eng = SecondaryEngine(sent.append, level=0.0, sync=True)
-        for i in range(30):                                  # one second of frames
+        for i in range(30):  # one second of frames
             eng.update(self.make(1.2), self.SIZE, dict(DEFAULTS), now=i / 30)
         self.assertLessEqual(len(sent), 9)
 
     def test_locked_paused_and_no_hand_do_not_change_level(self):
-        from test_logic import hand
-        from twohand import SecondaryEngine
+        from gesturesense.core.twohand import SecondaryEngine
+        from tests.helpers import hand
+
         eng = SecondaryEngine(None, level=0.4, sync=True)
         locked = hand(index=True, middle=False, ring=False, pinky=True, ratio=1.2)
         for i in range(30):
@@ -287,16 +304,19 @@ class TwoHandTests(unittest.TestCase):
         self.assertAlmostEqual(res.volume, 0.4)
 
     def test_brightness_control_degrades_without_package(self):
-        from twohand import BrightnessControl
+        from gesturesense.core.twohand import BrightnessControl
+
         b = BrightnessControl()
         if not b.available:
             self.assertIsNone(b.get())
-            b.set(0.5)                                        # no error
+            b.set(0.5)  # no error
 
     def test_scene_renders_two_hands(self):
-        from render3d import Scene3D
+        from gesturesense.render import Scene3D
+
         eng = GestureEngine(_Audio(), press=lambda k: None, now=0.0)
-        from twohand import SecondaryEngine
+        from gesturesense.core.twohand import SecondaryEngine
+
         sec = SecondaryEngine(None, sync=True)
         sc = Scene3D(480, 360)
         s = dict(DEFAULTS, two_hand_mode=True, orbit_auto=False)
@@ -312,11 +332,12 @@ class TwoHandTests(unittest.TestCase):
             r1 = eng1.update(n1, (480, 360), s, now=i / 30, world=w1)
             one = sc1.render(r1, s, 30, now=i / 30)
         self.assertEqual(two.shape, (360, 480, 3))
-        self.assertFalse(np.array_equal(two, one))             # the second hand really is drawn
+        self.assertFalse(np.array_equal(two, one))  # the second hand really is drawn
 
     def test_second_hand_fades_when_it_leaves(self):
-        from render3d import Scene3D
-        from twohand import SecondaryEngine
+        from gesturesense.core.twohand import SecondaryEngine
+        from gesturesense.render import Scene3D
+
         eng = GestureEngine(_Audio(), press=lambda k: None, now=0.0)
         sec = SecondaryEngine(None, sync=True)
         sc = Scene3D(320, 240)
@@ -324,18 +345,29 @@ class TwoHandTests(unittest.TestCase):
         n1, w1 = to_landmarks(synthetic_hand(0.5, 1.0), 0.7, 0.5)
         n2, w2 = to_landmarks(synthetic_hand(0.3, 1.0), 0.3, 0.5)
         for i in range(15):
-            sc.render(eng.update(n1, (320, 240), s, now=i / 30, world=w1), s, 30, now=i / 30,
-                      res2=sec.update(n2, (320, 240), s, now=i / 30, world=w2))
+            sc.render(
+                eng.update(n1, (320, 240), s, now=i / 30, world=w1),
+                s,
+                30,
+                now=i / 30,
+                res2=sec.update(n2, (320, 240), s, now=i / 30, world=w2),
+            )
         self.assertGreater(sc._slot2["hand_alpha"], 0.9)
         for i in range(15, 60):
-            sc.render(eng.update(n1, (320, 240), s, now=i / 30, world=w1), s, 30, now=i / 30,
-                      res2=sec.update(None, (320, 240), s, now=i / 30))
+            sc.render(
+                eng.update(n1, (320, 240), s, now=i / 30, world=w1),
+                s,
+                30,
+                now=i / 30,
+                res2=sec.update(None, (320, 240), s, now=i / 30),
+            )
         self.assertLess(sc._slot2["hand_alpha"], 0.05)
 
 
 class SkinTests(unittest.TestCase):
     def test_all_hand_styles_render_and_differ(self):
-        from render3d import Scene3D
+        from gesturesense.render import Scene3D
+
         outs = {}
         for style in ("android", "gold", "carbon", "hologram", "robot", "human", "glass"):
             eng = GestureEngine(_Audio(), press=lambda k: None, now=0.0)
@@ -349,11 +381,12 @@ class SkinTests(unittest.TestCase):
             outs[style] = img
         names = list(outs)
         for i, a in enumerate(names):
-            for b in names[i + 1:]:
+            for b in names[i + 1 :]:
                 self.assertFalse(np.array_equal(outs[a], outs[b]), f"{a} == {b}")
 
     def test_gold_is_warmer_than_android(self):
-        from render3d import Scene3D
+        from gesturesense.render import Scene3D
+
         means = {}
         for style in ("android", "gold"):
             eng = GestureEngine(_Audio(), press=lambda k: None, now=0.0)
@@ -361,15 +394,18 @@ class SkinTests(unittest.TestCase):
             s = dict(DEFAULTS, hand_style=style, orbit_auto=False, fx3d_motion=False)
             n, w = to_landmarks(synthetic_hand(0.6, 1.0), 0.5, 0.5)
             for i in range(12):
-                img = sc.render(eng.update(n, (400, 300), s, now=i / 30, world=w), s, 30, now=i / 30)
+                img = sc.render(
+                    eng.update(n, (400, 300), s, now=i / 30, world=w), s, 30, now=i / 30
+                )
             c = img[100:220, 120:280].astype(float)
-            means[style] = c[..., 0].mean() - c[..., 2].mean()      # red minus blue
+            means[style] = c[..., 0].mean() - c[..., 2].mean()  # red minus blue
         self.assertGreater(means["gold"], means["android"])
 
 
 class StatsTests(unittest.TestCase):
     def setUp(self):
         import tempfile
+
         self.dir = tempfile.TemporaryDirectory()
         self.path = __import__("pathlib").Path(self.dir.name) / "stats.json"
 
@@ -378,13 +414,15 @@ class StatsTests(unittest.TestCase):
 
     def test_record_and_summary(self):
         import time
-        from stats import UsageStats
+
+        from gesturesense.core.stats import UsageStats
+
         st = UsageStats()
         now = time.time()
         for _ in range(3):
             st.record("mute_on", now)
         st.record("next", now)
-        st.record("next", now - 86400)                   # yesterday
+        st.record("next", now - 86400)  # yesterday
         st.add_active(12.5, now)
         sm = st.summary(7, now)
         self.assertEqual(sm["total"], 5)
@@ -393,12 +431,13 @@ class StatsTests(unittest.TestCase):
         self.assertAlmostEqual(sm["active_seconds"], 12.5)
         self.assertEqual(sum(sm["hours"]), 5)
         self.assertEqual(len(sm["daily"]), 7)
-        self.assertEqual(sm["daily"][-1][1], 4)            # today is last
+        self.assertEqual(sm["daily"][-1][1], 4)  # today is last
         self.assertEqual(sm["daily"][-2][1], 1)
         self.assertEqual(st.summary(1, now)["total"], 4)
 
     def test_save_load_roundtrip(self):
-        from stats import UsageStats
+        from gesturesense.core.stats import UsageStats
+
         st = UsageStats()
         st.record("lock")
         self.assertTrue(st.save(self.path))
@@ -406,7 +445,8 @@ class StatsTests(unittest.TestCase):
         self.assertEqual(again.summary(7)["total"], 1)
 
     def test_bad_or_missing_file_gives_empty_stats(self):
-        from stats import UsageStats
+        from gesturesense.core.stats import UsageStats
+
         self.assertEqual(UsageStats.load(self.path).summary(7)["total"], 0)
         self.path.write_text("{not json", encoding="utf-8")
         self.assertEqual(UsageStats.load(self.path).summary(7)["total"], 0)
@@ -414,8 +454,10 @@ class StatsTests(unittest.TestCase):
         self.assertEqual(UsageStats.load(self.path).summary(7)["total"], 0)
 
     def test_corrupt_day_is_repaired(self):
-        from stats import UsageStats, day_key
         import time
+
+        from gesturesense.core.stats import UsageStats, day_key
+
         st = UsageStats({"days": {day_key(time.time()): {"events": {"next": 2}, "hours": [1, 2]}}})
         st.record("next")
         sm = st.summary(7)
@@ -423,7 +465,9 @@ class StatsTests(unittest.TestCase):
 
     def test_prune_and_reset(self):
         import time
-        from stats import UsageStats
+
+        from gesturesense.core.stats import UsageStats
+
         st = UsageStats()
         st.record("next", time.time() - 200 * 86400)
         st.record("next")
@@ -433,7 +477,8 @@ class StatsTests(unittest.TestCase):
         self.assertEqual(st.summary(7)["total"], 0)
 
     def test_duration_format(self):
-        from stats import fmt_duration
+        from gesturesense.core.stats import fmt_duration
+
         self.assertEqual(fmt_duration(42), "42 s")
         self.assertEqual(fmt_duration(300), "5 min")
         self.assertEqual(fmt_duration(3720), "1 h 02 min")
@@ -443,7 +488,8 @@ class AutoSwitchTests(unittest.TestCase):
     AVAILABLE = ["Music", "Presentation", "Video call", "Gaming"]
 
     def make(self, exes, rules=None):
-        from autoswitch import AutoSwitcher
+        from gesturesense.core.autoswitch import AutoSwitcher
+
         it = iter(exes)
         return AutoSwitcher(rules, get_exe=lambda: next(it))
 
@@ -458,7 +504,9 @@ class AutoSwitchTests(unittest.TestCase):
         return out, current
 
     def test_switches_after_app_is_stable_and_goes_back(self):
-        sw = self.make(["powerpnt.exe"] * 3 + ["notepad.exe"] * 3, rules={"powerpnt.exe": "Presentation"})
+        sw = self.make(
+            ["powerpnt.exe"] * 3 + ["notepad.exe"] * 3, rules={"powerpnt.exe": "Presentation"}
+        )
         out, cur = self.run_seq(sw, "Music", 3)
         self.assertEqual(out, ["Presentation"])
         out, cur = self.run_seq_continue(sw, cur, 3)
@@ -470,20 +518,20 @@ class AutoSwitchTests(unittest.TestCase):
     def test_needs_two_consecutive_polls(self):
         sw = self.make(["zoom.exe", "chrome.exe", "zoom.exe", "chrome.exe"])
         out, _ = self.run_seq(sw, "Music", 4)
-        self.assertEqual(out, [])                              # alt-tab flicker never switches
+        self.assertEqual(out, [])  # alt-tab flicker never switches
 
     def test_user_choice_is_not_overridden_on_leave(self):
         sw = self.make(["zoom.exe"] * 2 + ["notepad.exe"] * 3)
         out, cur = self.run_seq(sw, "Music", 2)
         self.assertEqual(out, ["Video call"])
-        out, cur = self.run_seq(sw, "Gaming", 3)               # user picked Gaming meanwhile
+        out, cur = self.run_seq(sw, "Gaming", 3)  # user picked Gaming meanwhile
         self.assertEqual(out, [])
         self.assertEqual(cur, "Gaming")
 
     def test_ignored_windows_change_nothing(self):
         sw = self.make(["zoom.exe"] * 2 + ["python.exe"] * 3 + ["explorer.exe"] * 3)
         out, cur = self.run_seq(sw, "Music", 8)
-        self.assertEqual(out, ["Video call"])                   # staying in our own window keeps it
+        self.assertEqual(out, ["Video call"])  # staying in our own window keeps it
         self.assertEqual(cur, "Video call")
 
     def test_missing_profile_and_no_exe(self):
@@ -496,7 +544,9 @@ class AutoSwitchTests(unittest.TestCase):
     def test_rules_file_merges_and_survives_garbage(self):
         import tempfile
         from pathlib import Path
-        from autoswitch import DEFAULT_RULES, load_rules
+
+        from gesturesense.core.autoswitch import DEFAULT_RULES, load_rules
+
         with tempfile.TemporaryDirectory() as d:
             p = Path(d) / "r.json"
             self.assertEqual(load_rules(p), DEFAULT_RULES)
@@ -509,13 +559,15 @@ class AutoSwitchTests(unittest.TestCase):
             self.assertEqual(load_rules(p), DEFAULT_RULES)
 
     def test_default_rules_point_at_builtin_profiles(self):
-        from autoswitch import DEFAULT_RULES
-        from profiles import BUILTIN
+        from gesturesense.config.profiles import BUILTIN
+        from gesturesense.core.autoswitch import DEFAULT_RULES
+
         for exe, prof in DEFAULT_RULES.items():
             self.assertIn(prof, BUILTIN, exe)
 
     def test_foreground_is_none_off_windows(self):
-        from autoswitch import foreground_exe
+        from gesturesense.core.autoswitch import foreground_exe
+
         if sys.platform != "win32":
             self.assertIsNone(foreground_exe())
 
@@ -525,15 +577,15 @@ class LauncherTests(unittest.TestCase):
 
     def test_launcher_files_exist_with_windows_line_endings(self):
         for name in ("GestureSense.bat", "create_desktop_shortcut.bat", "run.bat"):
-            data = open(os.path.join(self.ROOT, name), "rb").read()
+            data = (Path(self.ROOT) / name).read_bytes()
             self.assertIn(b"\r\n", data, name)
-            self.assertNotIn(b"\n", data.replace(b"\r\n", b""), name)   # no bare LF
+            self.assertNotIn(b"\n", data.replace(b"\r\n", b""), name)  # no bare LF
 
     def test_launcher_uses_windowless_python_and_the_icon(self):
-        bat = open(os.path.join(self.ROOT, "GestureSense.bat")).read()
+        bat = (Path(self.ROOT) / "GestureSense.bat").read_text()
         self.assertIn("pythonw.exe", bat)
         self.assertIn("main.py", bat)
-        lnk = open(os.path.join(self.ROOT, "create_desktop_shortcut.bat")).read()
+        lnk = (Path(self.ROOT) / "create_desktop_shortcut.bat").read_text()
         self.assertIn("icon.ico", lnk)
         self.assertIn("GestureSense.bat", lnk)
 
